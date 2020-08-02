@@ -98,13 +98,9 @@ func resourceUpdateSlackChannel(d *schema.ResourceData, m interface{}) error {
 func resourceDeleteSlackChannel(d *schema.ResourceData, m interface{}) error {
 	apiClient := slack.New(m.(*Config).Token)
 
-	if err := apiClient.ArchiveConversation(d.Id()); err != nil {
-		return err
-	}
+	err := apiClient.ArchiveConversation(d.Id())
 
-	d.SetId("")
-
-	return nil
+	return err
 }
 
 func resourceExistsSlackChannel(d *schema.ResourceData, m interface{}) (bool, error) {
