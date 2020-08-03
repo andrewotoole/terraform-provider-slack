@@ -96,7 +96,8 @@ func testAccCheckSlackChannelDestroy(s *terraform.State) error {
 			continue
 		}
 
-		channel, err := apiClient.GetConversationInfo(rs.Primary.ID, false)
+		id, _, err := parseTerraformId(rs.Primary.ID)
+		channel, err := apiClient.GetConversationInfo(id, false)
 		if err == nil {
 			if !channel.IsArchived {
 				return fmt.Errorf("channel still exists")
@@ -118,7 +119,11 @@ func testAccCheckSlackChannelExists(resource string) resource.TestCheckFunc {
 		}
 
 		apiClient := slack.New(testAccProvider.Meta().(*Config).Token)
-		_, err := apiClient.GetConversationInfo(rs.Primary.ID, false)
+		id, _, err := parseTerraformId(rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+		_, err = apiClient.GetConversationInfo(id, false)
 		if err != nil {
 			return fmt.Errorf("error fetching channel with resource %s. %s", resource, err)
 		}
