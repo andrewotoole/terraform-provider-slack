@@ -11,7 +11,7 @@ func Provider() terraform.ResourceProvider {
 			"token": {
 				Type:        schema.TypeString,
 				Required:    true,
-				DefaultFunc: schema.EnvDefaultFunc("TOKEN", nil),
+				DefaultFunc: schema.EnvDefaultFunc("SLACK_TOKEN", nil),
 				Description: "Slack OAuth Token for api.slack.com",
 			},
 		},

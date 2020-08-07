@@ -2,10 +2,12 @@ package slack
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/slack-go/slack"
-	"strings"
 )
 
 func resourceSlackChannel() *schema.Resource {
@@ -48,7 +50,7 @@ func resourceSlackChannel() *schema.Resource {
 func resourceCreateSlackChannel(d *schema.ResourceData, m interface{}) error {
 	apiClient := slack.New(m.(*Config).Token)
 
-	channel, err := apiClient.CreateConversation(d.Get("name").(string), false)
+	channel, err := execAndRetryStringBoolFunc(apiClient.CreateConversation, d.Get("name").(string), false)
 	if err != nil {
 		return err
 	}
@@ -59,16 +61,16 @@ func resourceCreateSlackChannel(d *schema.ResourceData, m interface{}) error {
 	}
 	d.SetId(terraformId)
 
-	if _, err := apiClient.SetTopicOfConversation(channel.ID, d.Get("topic").(string)); err != nil {
+	if _, err := execAndRetryStringStringFunc(apiClient.SetTopicOfConversation, channel.ID, d.Get("topic").(string)); err != nil {
 		return err
 	}
 
-	if _, err := apiClient.SetPurposeOfConversation(channel.ID, d.Get("purpose").(string)); err != nil {
+	if _, err := execAndRetryStringStringFunc(apiClient.SetPurposeOfConversation, channel.ID, d.Get("purpose").(string)); err != nil {
 		return err
 	}
 
 	if d.Get("is_archived").(bool) {
-		if err := apiClient.ArchiveConversation(channel.ID); err != nil {
+		if err := execAndRetryStringFunc(apiClient.ArchiveConversation, channel.ID); err != nil {
 			return err
 		}
 	}
@@ -104,7 +106,7 @@ func resourceUpdateSlackChannel(d *schema.ResourceData, m interface{}) error {
 	}
 
 	if channel.Name != d.Get("name").(string) {
-		if _, err := apiClient.RenameConversation(channel.ID, d.Get("name").(string)); err != nil {
+		if _, err := execAndRetryStringStringFunc(apiClient.RenameConversation, channel.ID, d.Get("name").(string)); err != nil {
 			return err
 		}
 
@@ -117,24 +119,24 @@ func resourceUpdateSlackChannel(d *schema.ResourceData, m interface{}) error {
 	}
 
 	if channel.Topic.Value != d.Get("topic").(string) {
-		if _, err := apiClient.SetTopicOfConversation(channel.ID, d.Get("topic").(string)); err != nil {
+		if _, err := execAndRetryStringStringFunc(apiClient.SetTopicOfConversation, channel.ID, d.Get("topic").(string)); err != nil {
 			return err
 		}
 	}
 
 	if channel.Purpose.Value != d.Get("purpose").(string) {
-		if _, err := apiClient.SetPurposeOfConversation(channel.ID, d.Get("purpose").(string)); err != nil {
+		if _, err := execAndRetryStringStringFunc(apiClient.SetPurposeOfConversation, channel.ID, d.Get("purpose").(string)); err != nil {
 			return err
 		}
 	}
 
 	if channel.IsArchived != d.Get("is_archived").(bool) {
 		if d.Get("is_archived").(bool) {
-			if err := apiClient.ArchiveConversation(channel.ID); err != nil {
+			if err := execAndRetryStringFunc(apiClient.ArchiveConversation, channel.ID); err != nil {
 				return err
 			}
 		} else {
-			if err := apiClient.UnArchiveConversation(channel.ID); err != nil {
+			if err := execAndRetryStringFunc(apiClient.UnArchiveConversation, channel.ID); err != nil {
 				return err
 			}
 		}
@@ -152,7 +154,7 @@ func resourceDeleteSlackChannel(d *schema.ResourceData, m interface{}) error {
 
 	// no way to truly "delete" a conversation, so archiving it is the next best thing
 	if !d.Get("is_archived").(bool) {
-		err = apiClient.ArchiveConversation(channel.ID)
+		err = execAndRetryStringFunc(apiClient.ArchiveConversation, channel.ID)
 		return err
 	}
 	return nil
@@ -198,7 +200,7 @@ func searchForChannelByName(name string, m interface{}) (slack.Channel, error) {
 	}
 	cursor := "start"
 	for cursor != "" {
-		channels, nextCursor, err := apiClient.GetConversations(&params)
+		channels, nextCursor, err := execAndRetryGetConversationsFunc(apiClient.GetConversations, &params)
 		if err != nil {
 			return slack.Channel{}, err
 		}
@@ -228,4 +230,49 @@ func createTerraformId(slackId string, name string) (string, error) {
 		return "", fmt.Errorf("malformed_properties - slack_id:%s | name:%s", slackId, name)
 	}
 	return fmt.Sprintf("%s:%s", slackId, name), nil
+}
+
+func execAndRetryStringBoolFunc(fn func(string, bool) (*slack.Channel, error), s string, b bool) (*slack.Channel, error) {
+	for {
+		result, err := fn(s, b)
+		if !sleep(err) {
+			return result, err
+		}
+	}
+}
+
+func execAndRetryStringStringFunc(fn func(string, string) (*slack.Channel, error), s1 string, s2 string) (*slack.Channel, error) {
+	for {
+		result, err := fn(s1, s2)
+		if !sleep(err) {
+			return result, err
+		}
+	}
+}
+
+func execAndRetryStringFunc(fn func(string) error, s string) error {
+	for {
+		err := fn(s)
+		if !sleep(err) {
+			return err
+		}
+	}
+}
+
+func execAndRetryGetConversationsFunc(fn func(*slack.GetConversationsParameters) ([]slack.Channel, string, error), p *slack.GetConversationsParameters) ([]slack.Channel, string, error) {
+	for {
+		c, n, err := fn(p)
+		if !sleep(err) {
+			return c, n, err
+		}
+	}
+}
+
+func sleep(e error) bool {
+	if e != nil && strings.HasPrefix(e.Error(), "slack rate limit exceeded") {
+		time.Sleep(5 * time.Second)
+		return true
+	} else {
+		return false
+	}
 }

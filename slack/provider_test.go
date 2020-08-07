@@ -29,7 +29,7 @@ func TestProviderImpl(t *testing.T) {
 }
 
 func testAccPreCheck(t *testing.T) {
-	if v := os.Getenv("TOKEN"); v == "" {
-		t.Fatal("TOKEN must be set for acceptance tests")
+	if v := os.Getenv("SLACK_TOKEN"); v == "" {
+		t.Fatal("SLACK_TOKEN must be set for acceptance tests")
 	}
 }
