@@ -10,5 +10,5 @@ require (
 	github.com/hashicorp/terraform-plugin-sdk v1.15.0
 	github.com/mitchellh/go-testing-interface v1.0.4 // indirect
 	github.com/slack-go/slack v0.6.5
-	github.com/ulikunitz/xz v0.5.7 // indirect
+	github.com/ulikunitz/xz v0.5.8 // indirect
 )
